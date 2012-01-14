@@ -40,6 +40,10 @@ data RGBA
 -- |A 24-bit image with red, green and blue channels
 data RGB
 
+-- |@Img a@ is an image where the phantom type 'a' indicates the image format
+-- 
+-- All images are held in a three dimensional 'repa' array.  If the image
+-- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. x :. y :. 1@.
 data Img a = Img { imgData :: Array DIM3 Word8 }
 
 readImageRGBA :: FilePath -> IO (Either String (Img RGBA))
