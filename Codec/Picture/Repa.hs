@@ -1,26 +1,86 @@
 {-# LANGUAGE EmptyDataDecls, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses #-}
 module Codec.Picture.Repa
-       ( Img, imgData
-       , buildImg
-       -- * Helper Functions (useful for GL etc.) 
+       ( -- * Primitive types and operations
+         Img, imgData
+       , convertImage
+         -- * High level image decoding functions
+       , readImageRGBA, readImageRGB, readImageR, readImageG, readImageB
+       , decodeImageRGBA, decodeImageRGB, decodeImageR, decodeImageG, decodeImageB
+       -- * Image Representations (Phantom Types)
+       , RGBA, RGB, R, G, B
+       -- * Helper Functions (useful for OpenGL etc.) 
        , toVector
        , toForeignPtr
+       -- * Internal Functionallity (exported for advanced uses)
+       , ToRGBAChannels(..)
        ) where
 import qualified Data.Array.Repa as R
 import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3)
-import Codec.Picture
-import Codec.Picture.Types
+import qualified Codec.Picture as P
+import Codec.Picture hiding (readImage, decodeImage)
+import Codec.Picture.Types hiding (convertImage)
 import qualified Data.Vector.Storable as S
 import Foreign.ForeignPtr
 import Data.Word
+import Control.Monad
+import Data.ByteString
 
+-- |An all-red image
 data R
+
+-- |An all-green image
 data G
+
+-- |An all-blue image
 data B
+
+-- |A 32-bit image with full red, green, blue and alpha channels.
 data RGBA
+
+-- |A 24-bit image with red, green and blue channels
 data RGB
 
 data Img a = Img { imgData :: Array DIM3 Word8 }
+
+readImageRGBA :: FilePath -> IO (Either String (Img RGBA))
+readImageRGBA f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
+
+readImageRGB :: FilePath -> IO (Either String (Img RGB))
+readImageRGB f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
+
+readImageB :: FilePath -> IO (Either String (Img B))
+readImageB f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
+
+readImageG :: FilePath -> IO (Either String (Img G))
+readImageG f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
+
+readImageR :: FilePath -> IO (Either String (Img R))
+readImageR f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
+
+decodeImageRGBA :: ByteString -> Either String (Img RGBA)
+decodeImageRGBA = fmap convertImage . P.decodeImage
+
+decodeImageRGB :: ByteString -> Either String (Img RGB)
+decodeImageRGB = fmap convertImage . P.decodeImage
+
+decodeImageR :: ByteString -> Either String (Img R)
+decodeImageR = fmap convertImage . P.decodeImage
+
+decodeImageG :: ByteString -> Either String (Img G)
+decodeImageG = fmap convertImage . P.decodeImage
+
+decodeImageB :: ByteString -> Either String (Img B)
+decodeImageB = fmap convertImage . P.decodeImage
 
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
@@ -33,14 +93,17 @@ toVector :: Img a -> S.Vector Word8
 toVector (Img a) = S.convert (R.toVector a)
 
 -- Helper functions --
+getChannel :: Int -> PixelRGBA8 -> Word8
 getChannel 0 (PixelRGBA8 r g b a) = r
 getChannel 1 (PixelRGBA8 r g b a) = g
 getChannel 2 (PixelRGBA8 r g b a) = b
 getChannel _ (PixelRGBA8 r g b a) = a
 
+-- |For any of the JuicyPixel pixels, get the RGBA values
 getChan :: (ToRGBAChannels p) => Int -> p -> Word8
 getChan c = getChannel c . toRGBAChannels
 
+-- |For any of the JuicyPixel images, get a channel of a particular pixel
 getPixel :: (ToRGBAChannels p, Pixel p) => Int -> Int -> Int -> Image p -> Word8
 getPixel x y z p = getChan z (pixelAt p x y)
 
@@ -65,11 +128,72 @@ instance ToRGBAChannels Pixel8 where
 
 -- Now we start the instances needing exported
 
-class BuildImg a b where
-  buildImg :: Image a -> Img b
+-- |Converts from 'JuicyPixels' 'Image' type to the repa-based 'Img' type.
+class ConvertImage a b where
+  -- |Converts from 'JuicyPixels' 'Image' type to the repa-based 'Img' type.
+  convertImage :: a -> Img b
 
-instance (ToRGBAChannels a, Pixel a) => BuildImg a RGBA where
-  buildImg p@(Image x y dat) =
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
+  convertImage p@(Image w h dat) =
     let z = 4
-    in Img $ R.fromFunction (Z :. x :. y :. z) 
-                                    (\(Z :. x :. y :. z) -> getPixel x y z p)
+    in Img $ R.fromFunction (Z :. w :. h :. z) 
+                                    (\(Z :. x :. y :. z') -> getPixel (w - x -1) (h - y - 1) (z - z' - 1) p)
+  
+instance ConvertImage DynamicImage RGBA where
+  convertImage (ImageY8 i) = convertImage i
+  convertImage (ImageYA8 i) = convertImage i
+  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageYCbCr8 i) = convertImage i
+  
+instance ConvertImage DynamicImage RGB where
+  convertImage (ImageY8 i) = convertImage i
+  convertImage (ImageYA8 i) = convertImage i
+  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageYCbCr8 i) = convertImage i
+  
+instance ConvertImage DynamicImage R where
+  convertImage (ImageY8 i) = convertImage i
+  convertImage (ImageYA8 i) = convertImage i
+  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageYCbCr8 i) = convertImage i
+  
+instance ConvertImage DynamicImage G where
+  convertImage (ImageY8 i) = convertImage i
+  convertImage (ImageYA8 i) = convertImage i
+  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageYCbCr8 i) = convertImage i
+  
+instance ConvertImage DynamicImage B where
+  convertImage (ImageY8 i) = convertImage i
+  convertImage (ImageYA8 i) = convertImage i
+  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageYCbCr8 i) = convertImage i
+  
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
+  convertImage p@(Image w h dat) =
+    let z = 3
+    in Img $ R.fromFunction (Z :. w :. h :. z)
+                            (\(Z :. x :. y :. z') -> getPixel (w - x -1) (h - y -1) (z' - z -1) p)
+
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
+  convertImage p@(Image w h dat) =
+    let z = 1
+    in Img $ R.fromFunction (Z :. w :. h :. z)
+                            (\(Z :. x :. y :. z) -> getPixel (w - x -1) (h-y-1) 0 p)
+       
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
+  convertImage p@(Image w h dat) =
+    let z = 1
+    in Img $ R.fromFunction (Z :. w :. h :. z)
+                            (\(Z :. x :. y :. z) -> getPixel (w-x-1) (h-y-1) 1 p)
+       
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
+  convertImage p@(Image w h dat) =
+    let z = 1
+    in Img $ R.fromFunction (Z :. w :. h :. z)
+                            (\(Z :. x :. y :. z) -> getPixel (w-x-1) (h-y-1) 2 p)
