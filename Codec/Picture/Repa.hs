@@ -11,6 +11,7 @@ module Codec.Picture.Repa
        -- * Helper Functions (useful for OpenGL etc.) 
        , toVector
        , toForeignPtr
+       , reverseColorChannels
        -- * Internal Functionallity (exported for advanced uses)
        , ToRGBAChannels(..)
        ) where
@@ -35,16 +36,27 @@ data G
 data B
 
 -- |A 32-bit image with full red, green, blue and alpha channels.
+--
+-- The image is stored as Height x Width x ColorChannel.
+--
+-- The color channel is stored in RGBA order.  For the common OpenGL ordering
+-- users might want to use 'reverseColorChannel'.
 data RGBA
 
 -- |A 24-bit image with red, green and blue channels
 data RGB
 
 -- |@Img a@ is an image where the phantom type 'a' indicates the image format
--- 
+--
 -- All images are held in a three dimensional 'repa' array.  If the image
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. x :. y :. 1@.
 data Img a = Img { imgData :: Array DIM3 Word8 }
+
+reverseColorChannels :: Img a -> Img a
+reverseColorChannels (Img r) = Img (R.backpermute e order r)
+  where
+  e@(Z :. row :. col :. z)  = R.extent r
+  order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
 
 readImageRGBA :: FilePath -> IO (Either String (Img RGBA))
 readImageRGBA f = do
@@ -132,17 +144,12 @@ instance ToRGBAChannels Pixel8 where
 
 -- Now we start the instances needing exported
 
--- |Converts from 'JuicyPixels' 'Image' type to the repa-based 'Img' type.
+-- |Converts from 'JuicyPixels' type to the repa-based 'Img' type.
 class ConvertImage a b where
-  -- |Converts from 'JuicyPixels' 'Image' type to the repa-based 'Img' type.
+  -- |Converts from 'JuicyPixels' type (Usually 'Image' or
+  -- 'DynamicImage' to the repa-based 'Img' type.
   convertImage :: a -> Img b
 
-instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
-  convertImage p@(Image w h dat) =
-    let z = 4
-    in Img $ R.fromFunction (Z :. w :. h :. z) 
-                                    (\(Z :. x :. y :. z') -> getPixel (w - x -1) (h - y - 1) (z - z' - 1) p)
-  
 instance ConvertImage DynamicImage RGBA where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
@@ -177,27 +184,33 @@ instance ConvertImage DynamicImage B where
   convertImage (ImageRGB8 i) = convertImage i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
+
+instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
+  convertImage p@(Image w h dat) =
+    let z = 4
+    in Img $ R.fromFunction (Z :. h :. w :. z) 
+                                    (\(Z :. y :. x :. z') -> getPixel x (h - y - 1) (z - z' - 1) p)
   
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
-    in Img $ R.fromFunction (Z :. w :. h :. z)
-                            (\(Z :. x :. y :. z') -> getPixel (w - x -1) (h - y -1) (z' - z -1) p)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
+                            (\(Z :. y :. x :. z') -> getPixel x (h - y - 1) (z' - z -1) p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. w :. h :. z)
-                            (\(Z :. x :. y :. z) -> getPixel (w - x -1) (h-y-1) 0 p)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
+                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 0 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. w :. h :. z)
-                            (\(Z :. x :. y :. z) -> getPixel (w-x-1) (h-y-1) 1 p)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
+                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 1 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. w :. h :. z)
-                            (\(Z :. x :. y :. z) -> getPixel (w-x-1) (h-y-1) 2 p)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
+                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 2 p)
