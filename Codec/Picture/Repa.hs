@@ -11,7 +11,7 @@ module Codec.Picture.Repa
        -- * Helper Functions (useful for OpenGL etc.) 
        , toVector
        , toForeignPtr
-       , reverseColorChannels
+       , reverseColorChannel
        -- * Internal Functionallity (exported for advanced uses)
        , ToRGBAChannels(..)
        ) where
@@ -52,8 +52,8 @@ data RGB
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
 data Img a = Img { imgData :: Array DIM3 Word8 }
 
-reverseColorChannels :: Img a -> Img a
-reverseColorChannels (Img r) = Img (R.backpermute e order r)
+reverseColorChannel :: Img a -> Img a
+reverseColorChannel (Img r) = Img (R.backpermute e order r)
   where
   e@(Z :. row :. col :. z)  = R.extent r
   order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
