@@ -49,7 +49,7 @@ data RGB
 -- |@Img a@ is an image where the phantom type 'a' indicates the image format
 --
 -- All images are held in a three dimensional 'repa' array.  If the image
--- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. x :. y :. 1@.
+-- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
 data Img a = Img { imgData :: Array DIM3 Word8 }
 
 reverseColorChannels :: Img a -> Img a
