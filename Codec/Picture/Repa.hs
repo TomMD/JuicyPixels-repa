@@ -12,11 +12,12 @@ module Codec.Picture.Repa
        , toVector
        , toForeignPtr
        , reverseColorChannel
+       , flipHorizontally, flipVertically
        -- * Internal Functionallity (exported for advanced uses)
        , ToRGBAChannels(..)
        ) where
 import qualified Data.Array.Repa as R
-import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3)
+import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
 import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
 import Codec.Picture.Types hiding (convertImage)
@@ -52,6 +53,11 @@ data RGB
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
 data Img a = Img { imgData :: Array DIM3 Word8 }
 
+-- |By default, the color channel for 'RGBA' indexes 0 -> R, 1 -> G, 2
+-- -> B, 3 -> A.  This is the AGBR byte ordering in OpenGL.  For
+-- rendering with OpenGL's RGBA PixelFormat be sure to call
+-- reverseColorChannel before converting to a Vector (or directly to
+-- bytestring via 'repa-bytestring').
 reverseColorChannel :: Img a -> Img a
 reverseColorChannel (Img r) = Img (R.backpermute e order r)
   where
@@ -189,28 +195,40 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
     in Img $ R.fromFunction (Z :. h :. w :. z) 
-                                    (\(Z :. y :. x :. z') -> getPixel x (h - y - 1) (z - z' - 1) p)
+                                    (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
   
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
     in Img $ R.fromFunction (Z :. h :. w :. z)
-                            (\(Z :. y :. x :. z') -> getPixel x (h - y - 1) (z' - z -1) p)
+                            (\(Z :. y :. x :. z') -> getPixel x y (z' - z -1) p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
     let z = 1
     in Img $ R.fromFunction (Z :. h :. w :. z)
-                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 0 p)
+                            (\(Z :. y :. x :. z) -> getPixel x y 0 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
     in Img $ R.fromFunction (Z :. h :. w :. z)
-                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 1 p)
+                            (\(Z :. y :. x :. z) -> getPixel x y 1 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
     in Img $ R.fromFunction (Z :. h :. w :. z)
-                            (\(Z :. y :. x :. z) -> getPixel x (h-y-1) 2 p)
+                            (\(Z :. y :. x :. z) -> getPixel x y 2 p)
+
+flipVertically :: Img a -> Img a
+flipVertically (Img rp) = Img (backpermute e order rp)
+ where
+ e@(Z :. col :. row :. z) = extent rp
+ order (Z :. oldCol :. oldRow :. oldChan) = Z :. oldCol :. row - oldRow - 1 :. oldChan
+
+flipHorizontally :: Img a -> Img b
+flipHorizontally (Img rp) = Img (backpermute e order rp)
+ where
+ e@(Z :. col :. row :. z) = extent rp
+ order (Z :. oldCol :. oldRow :. oldChan) = Z :. col - oldCol - 1:. oldRow :. oldChan
