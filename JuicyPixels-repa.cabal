@@ -10,7 +10,7 @@ Name:                JuicyPixels-repa
 Version:             0.1
 
 -- A short (one-line) description of the package.
-Synopsis:            Convenience functions to obtain Repa and Vector.Storable representations of images.
+Synopsis:            Convenience functions to obtain array representations of images.
 
 -- A longer description of the package.
 Description:         This wraps the Juicy.Pixels library to convert into 'Repa' and 

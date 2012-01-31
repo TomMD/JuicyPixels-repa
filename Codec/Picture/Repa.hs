@@ -224,11 +224,11 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
 flipVertically :: Img a -> Img a
 flipVertically (Img rp) = Img (backpermute e order rp)
  where
- e@(Z :. col :. row :. z) = extent rp
- order (Z :. oldCol :. oldRow :. oldChan) = Z :. oldCol :. row - oldRow - 1 :. oldChan
+ e@(Z :. row :. col :. z) = extent rp
+ order (Z :. oldRow :. oldCol :. oldChan) = Z :. row - oldRow - 1 :. oldCol :. oldChan
 
 flipHorizontally :: Img a -> Img b
 flipHorizontally (Img rp) = Img (backpermute e order rp)
  where
- e@(Z :. col :. row :. z) = extent rp
- order (Z :. oldCol :. oldRow :. oldChan) = Z :. col - oldCol - 1:. oldRow :. oldChan
+ e@(Z :. row :. col :. z) = extent rp
+ order (Z :. oldRow :. oldCol :. oldChan) = Z :. oldRow :. col - oldCol - 1 :. oldChan

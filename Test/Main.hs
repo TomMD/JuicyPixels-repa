@@ -7,9 +7,13 @@ import System.Environment (getArgs)
 import Data.Array.Repa.ByteString as RB
 
 main = do
-  i <- getArgs >>= readImageRGBA . head
-  let (x,y,pic) = repaToPicture True . imgData . either error id $ i
-  display (FullScreen (1280,1024)) white pic
+  ie <- getArgs >>= readImageRGBA . head
+  let i = either error id ie
+      mkPic = (\(x,y,pic) -> pic) . repaToPicture True . imgData
+  -- display (FullScreen (1280,1024)) white (mkPic i)
+  display (FullScreen (1280,1024)) white (mkPic $ flipVertically i)
+  display (FullScreen (1280,1024)) white (mkPic $ flipHorizontally i)
+  display (FullScreen (1280,1024)) white (mkPic $ flipVertically $ flipHorizontally i)
 
 -- |@repaToPicture cacheMeFlag array@ will convert a 'Repa' RGBA array to a tuple of
 -- the number of columns, rows and a bitmap for use with 'Gloss'.
