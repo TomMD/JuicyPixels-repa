@@ -3,9 +3,7 @@ module Codec.Picture.Repa
        ( -- * Primitive types and operations
          Img, imgData
        , convertImage
-         -- * Generic interface
-       , readImage, decodeImage
-         -- * Monomorphic image decoding functions
+         -- * High level image decoding functions
        , readImageRGBA, readImageRGB, readImageR, readImageG, readImageB
        , decodeImageRGBA, decodeImageRGB, decodeImageR, decodeImageG, decodeImageB
        -- * Image Representations (Phantom Types)
@@ -24,11 +22,10 @@ import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
 import Codec.Picture.Types hiding (convertImage)
 import qualified Data.Vector.Storable as S
-import qualified Data.Vector.Unboxed as VU
 import Foreign.ForeignPtr
 import Data.Word
 import Control.Monad
-import Data.ByteString as B
+import Data.ByteString
 
 -- |An all-red image
 data R
@@ -68,51 +65,44 @@ reverseColorChannel (Img r) = Img (R.backpermute e order r)
   order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
 
 readImageRGBA :: FilePath -> IO (Either String (Img RGBA))
-readImageRGBA = readImage
+readImageRGBA f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
 
 readImageRGB :: FilePath -> IO (Either String (Img RGB))
-readImageRGB = readImage
+readImageRGB f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
 
 readImageB :: FilePath -> IO (Either String (Img B))
-readImageB = readImage
+readImageB f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
 
 readImageG :: FilePath -> IO (Either String (Img G))
-readImageG = readImage
+readImageG f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
 
 readImageR :: FilePath -> IO (Either String (Img R))
-readImageR = readImage
+readImageR f = do
+  x <- P.readImage f
+  return (fmap convertImage x)
 
 decodeImageRGBA :: ByteString -> Either String (Img RGBA)
-decodeImageRGBA = decodeImage
+decodeImageRGBA = fmap convertImage . P.decodeImage
 
 decodeImageRGB :: ByteString -> Either String (Img RGB)
-decodeImageRGB = decodeImage
+decodeImageRGB = fmap convertImage . P.decodeImage
 
 decodeImageR :: ByteString -> Either String (Img R)
-decodeImageR = decodeImage
+decodeImageR = fmap convertImage . P.decodeImage
 
 decodeImageG :: ByteString -> Either String (Img G)
-decodeImageG = decodeImage
+decodeImageG = fmap convertImage . P.decodeImage
 
 decodeImageB :: ByteString -> Either String (Img B)
-decodeImageB = decodeImage
-
-class DecodeImage a where
-  decodeImage :: ByteString -> Either String (Img a)
-
-instance DecodeImage RGBA where
-  decodeImage = decodeImageRGBA
-instance DecodeImage RGB where
-  decodeImage = decodeImageRGB
-instance DecodeImage R where
-  decodeImage = decodeImageR
-instance DecodeImage G where
-  decodeImage = decodeImageG
-instance DecodeImage B where
-  decodeImage = decodeImageB
-
-readImage :: DecodeImage a => FilePath -> IO (Either String (Img a))
-readImage f = liftM decodeImage (B.readFile f)
+decodeImageB = fmap convertImage . P.decodeImage
 
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
@@ -158,14 +148,6 @@ instance ToRGBAChannels PixelYA8 where
 instance ToRGBAChannels Pixel8 where
   toRGBAChannels = promotePixel
 
-zeroCopyConvert :: Int -> Image a -> Img b
-zeroCopyConvert cc (Image w h dat) =
-    let (ptr,off,len) = S.unsafeToForeignPtr dat
-        sh = Z :. h :. w :. cc
-    in if off == 0
-       then flipVertically . Img . R.unsafeFromForeignPtr sh   $  ptr
-       else flipVertically . Img . R.fromVector sh $ VU.convert $ dat
-
 -- Now we start the instances needing exported
 
 -- |Converts from 'JuicyPixels' type to the repa-based 'Img' type.
@@ -178,13 +160,13 @@ instance ConvertImage DynamicImage RGBA where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
-  convertImage (ImageRGBA8 i) = zeroCopyConvert 4 i
+  convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
   
 instance ConvertImage DynamicImage RGB where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
-  convertImage (ImageRGB8 i) = zeroCopyConvert 3 i
+  convertImage (ImageRGB8 i) = convertImage i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
   
@@ -213,7 +195,7 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
     in Img $ R.fromFunction (Z :. h :. w :. z) 
-                            (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
+                                    (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
   
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
