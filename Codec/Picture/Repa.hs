@@ -3,7 +3,9 @@ module Codec.Picture.Repa
        ( -- * Primitive types and operations
          Img, imgData
        , convertImage
-         -- * High level image decoding functions
+       -- * Generic interface
+       , readImage, decodeImage
+       -- * Monomorphic image decoding functions
        , readImageRGBA, readImageRGB, readImageR, readImageG, readImageB
        , decodeImageRGBA, decodeImageRGB, decodeImageR, decodeImageG, decodeImageB
        -- * Image Representations (Phantom Types)
@@ -104,6 +106,23 @@ decodeImageG = fmap convertImage . P.decodeImage
 decodeImageB :: ByteString -> Either String (Img B)
 decodeImageB = fmap convertImage . P.decodeImage
 
+class DecodeImage a where
+  decodeImage :: ByteString -> Either String (Img a)
+
+instance DecodeImage RGBA where
+  decodeImage = decodeImageRGBA
+instance DecodeImage RGB where
+  decodeImage = decodeImageRGB
+instance DecodeImage R where
+  decodeImage = decodeImageR
+instance DecodeImage G where
+  decodeImage = decodeImageG
+instance DecodeImage B where
+  decodeImage = decodeImageB
+
+readImage :: DecodeImage a => FilePath -> IO (Either String (Img a))
+readImage f = liftM decodeImage (B.readFile f)
+
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
 toForeignPtr = S.unsafeToForeignPtr . S.convert . R.toVector . imgData
@@ -148,6 +167,14 @@ instance ToRGBAChannels PixelYA8 where
 instance ToRGBAChannels Pixel8 where
   toRGBAChannels = promotePixel
 
+zeroCopyConvert :: Int -> Image a -> Img b
+zeroCopyConvert cc (Image w h dat) =
+    let (ptr,off,len) = S.unsafeToForeignPtr dat
+        sh = Z :. h :. w :. cc
+    in if off == 0
+       then flipVertically . Img . R.unsafeFromForeignPtr sh   $  ptr
+       else flipVertically . Img . R.fromVector sh $ VU.convert $ dat
+
 -- Now we start the instances needing exported
 
 -- |Converts from 'JuicyPixels' type to the repa-based 'Img' type.
@@ -160,13 +187,13 @@ instance ConvertImage DynamicImage RGBA where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
-  convertImage (ImageRGBA8 i) = convertImage i
+  convertImage (ImageRGBA8 i) = zeroCopyConvert 4 i
   convertImage (ImageYCbCr8 i) = convertImage i
   
 instance ConvertImage DynamicImage RGB where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
-  convertImage (ImageRGB8 i) = convertImage i
+  convertImage (ImageRGB8 i) = zeroCopyConvert 3 i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
   

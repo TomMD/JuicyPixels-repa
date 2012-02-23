@@ -7,7 +7,7 @@ Name:                JuicyPixels-repa
 -- The package version. See the Haskell package versioning policy
 -- (http://www.haskell.org/haskellwiki/Package_versioning_policy) for
 -- standards guiding when and how versions should be incremented.
-Version:             0.1
+Version:             0.2
 
 -- A short (one-line) description of the package.
 Synopsis:            Convenience functions to obtain array representations of images.
@@ -50,7 +50,7 @@ Library
   
   -- Packages needed in order to build this package.
   Build-depends:       base >= 4.0 && < 5, repa >= 2.1 && < 2.3
-                    , JuicyPixels >= 1.0 && < 1.1
+                    , JuicyPixels >= 1.1 && < 1.2
                     , vector >= 0.9 && < 0.10
                     , bytestring >= 0.9 && < 0.10
   
