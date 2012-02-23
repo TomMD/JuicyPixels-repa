@@ -27,7 +27,8 @@ import qualified Data.Vector.Storable as S
 import Foreign.ForeignPtr
 import Data.Word
 import Control.Monad
-import Data.ByteString
+import Data.ByteString as B
+import qualified Data.Vector.Unboxed as VU
 
 -- |An all-red image
 data R
