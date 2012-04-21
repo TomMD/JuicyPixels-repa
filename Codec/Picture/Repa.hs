@@ -19,6 +19,7 @@ module Codec.Picture.Repa
        , ToRGBAChannels(..)
        ) where
 import qualified Data.Array.Repa as R
+import qualified Data.Array.Repa.Repr.Unboxed as RU
 import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
 import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
@@ -54,7 +55,7 @@ data RGB
 --
 -- All images are held in a three dimensional 'repa' array.  If the image
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
-data Img a = Img { imgData :: Array DIM3 Word8 }
+data Img a = Img { imgData :: Array RU.U DIM3 Word8 }
 
 -- |By default, the color channel for 'RGBA' indexes 0 -> R, 1 -> G, 2
 -- -> B, 3 -> A.  This is the AGBR byte ordering in OpenGL.  For
@@ -62,7 +63,7 @@ data Img a = Img { imgData :: Array DIM3 Word8 }
 -- reverseColorChannel before converting to a Vector (or directly to
 -- bytestring via 'repa-bytestring').
 reverseColorChannel :: Img a -> Img a
-reverseColorChannel (Img r) = Img (R.backpermute e order r)
+reverseColorChannel (Img r) = Img (R.computeUnboxedS $ R.backpermute e order r)
   where
   e@(Z :. row :. col :. z)  = R.extent r
   order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
@@ -126,13 +127,13 @@ readImage f = liftM decodeImage (B.readFile f)
 
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
-toForeignPtr = S.unsafeToForeignPtr . S.convert . R.toVector . imgData
+toForeignPtr = S.unsafeToForeignPtr . S.convert . RU.toUnboxed . imgData
 
 -- |Convert an 'Img' to a storable 'Vector', often useful for OpenGL
 -- and other C interfaces.  Notice the format of the data depends on
 -- the type of the 'Img a'. O(n)
 toVector :: Img a -> S.Vector Word8
-toVector (Img a) = S.convert (R.toVector a)
+toVector (Img a) = S.convert (RU.toUnboxed a)
 
 -- Helper functions --
 getChannel :: Int -> PixelRGBA8 -> Word8
@@ -168,6 +169,7 @@ instance ToRGBAChannels PixelYA8 where
 instance ToRGBAChannels Pixel8 where
   toRGBAChannels = promotePixel
 
+{-
 zeroCopyConvert :: Int -> Image a -> Img b
 zeroCopyConvert cc (Image w h dat) =
     let (ptr,off,len) = S.unsafeToForeignPtr dat
@@ -175,6 +177,7 @@ zeroCopyConvert cc (Image w h dat) =
     in if off == 0
        then flipVertically . Img . R.unsafeFromForeignPtr sh   $  ptr
        else flipVertically . Img . R.fromVector sh $ VU.convert $ dat
+-}
 
 -- Now we start the instances needing exported
 
@@ -188,13 +191,13 @@ instance ConvertImage DynamicImage RGBA where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
-  convertImage (ImageRGBA8 i) = zeroCopyConvert 4 i
+  convertImage (ImageRGBA8 i) = convertImage i -- zeroCopyConvert 4 i
   convertImage (ImageYCbCr8 i) = convertImage i
   
 instance ConvertImage DynamicImage RGB where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
-  convertImage (ImageRGB8 i) = zeroCopyConvert 3 i
+  convertImage (ImageRGB8 i) = convertImage i -- zeroCopyConvert 3 i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
   
@@ -222,41 +225,41 @@ instance ConvertImage DynamicImage B where
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
-    in Img $ R.fromFunction (Z :. h :. w :. z) 
+    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z) 
                                     (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
   
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
-    in Img $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z') -> getPixel x y (z' - z -1) p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 0 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 1 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
 
 flipVertically :: Img a -> Img a
-flipVertically (Img rp) = Img (backpermute e order rp)
+flipVertically (Img rp) = Img (R.computeUnboxedS $ backpermute e order rp)
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. row - oldRow - 1 :. oldCol :. oldChan
 
 flipHorizontally :: Img a -> Img b
-flipHorizontally (Img rp) = Img (backpermute e order rp)
+flipHorizontally (Img rp) = Img (R.computeUnboxedS $ backpermute e order rp)
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. oldRow :. col - oldCol - 1 :. oldChan
