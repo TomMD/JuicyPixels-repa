@@ -133,7 +133,7 @@ toForeignPtr = S.unsafeToForeignPtr . S.convert . RU.toUnboxed . imgData
 -- and other C interfaces.  Notice the format of the data depends on
 -- the type of the 'Img a'. O(n)
 toVector :: Img a -> S.Vector Word8
-toVector (Img a) = S.convert (RU.toUnboxed a)
+toVector (Img a) = S.convert . RU.toUnboxed $ a
 
 -- Helper functions --
 getChannel :: Int -> PixelRGBA8 -> Word8
