@@ -11,15 +11,17 @@ module Codec.Picture.Repa
        -- * Image Representations (Phantom Types)
        , RGBA, RGB, R, G, B
        -- * Helper Functions (useful for OpenGL etc.) 
-       , toVector
        , toForeignPtr
+       , onImg
        , reverseColorChannel
        , flipHorizontally, flipVertically
+       , vConcat, hConcat
        -- * Internal Functionallity (exported for advanced uses)
        , ToRGBAChannels(..)
        ) where
 import qualified Data.Array.Repa as R
-import qualified Data.Array.Repa.Repr.Unboxed as RU
+import qualified Data.Array.Repa.Repr.ForeignPtr as RF
+import Data.Array.Repa.Repr.ForeignPtr (F)
 import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
 import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
@@ -55,7 +57,10 @@ data RGB
 --
 -- All images are held in a three dimensional 'repa' array.  If the image
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
-data Img a = Img { imgData :: Array RU.U DIM3 Word8 }
+data Img a = Img { imgData :: Array F DIM3 Word8 }
+
+onImg :: (Array F DIM3 Word8 -> Array F DIM3 Word8) -> Img a -> Img a
+onImg f (Img a) = Img (f a)
 
 -- |By default, the color channel for 'RGBA' indexes 0 -> R, 1 -> G, 2
 -- -> B, 3 -> A.  This is the AGBR byte ordering in OpenGL.  For
@@ -63,7 +68,7 @@ data Img a = Img { imgData :: Array RU.U DIM3 Word8 }
 -- reverseColorChannel before converting to a Vector (or directly to
 -- bytestring via 'repa-bytestring').
 reverseColorChannel :: Img a -> Img a
-reverseColorChannel (Img r) = Img (R.computeUnboxedS $ R.backpermute e order r)
+reverseColorChannel (Img r) = Img (R.computeS $ R.backpermute e order r)
   where
   e@(Z :. row :. col :. z)  = R.extent r
   order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
@@ -127,13 +132,9 @@ readImage f = liftM decodeImage (B.readFile f)
 
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
-toForeignPtr = S.unsafeToForeignPtr . S.convert . RU.toUnboxed . imgData
-
--- |Convert an 'Img' to a storable 'Vector', often useful for OpenGL
--- and other C interfaces.  Notice the format of the data depends on
--- the type of the 'Img a'. O(n)
-toVector :: Img a -> S.Vector Word8
-toVector (Img a) = S.convert . RU.toUnboxed $ a
+toForeignPtr r = (RF.toForeignPtr . imgData $ r, row * col * d, 0)
+ where
+ (Z :. row :. col :. d) = extent (imgData r)
 
 -- Helper functions --
 getChannel :: Int -> PixelRGBA8 -> Word8
@@ -225,41 +226,72 @@ instance ConvertImage DynamicImage B where
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
-    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z) 
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z) 
                                     (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
   
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
-    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z') -> getPixel x y (z' - z -1) p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 0 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 1 p)
        
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeUnboxedS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
 
-flipVertically :: Img a -> Img a
-flipVertically (Img rp) = Img (R.computeUnboxedS $ backpermute e order rp)
+flipVertically :: Array F DIM3 Word8 -> Array F DIM3 Word8
+flipVertically rp = (R.computeS $ backpermute e order rp)
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. row - oldRow - 1 :. oldCol :. oldChan
 
-flipHorizontally :: Img a -> Img b
-flipHorizontally (Img rp) = Img (R.computeUnboxedS $ backpermute e order rp)
+flipHorizontally :: Array F DIM3 Word8 -> Array F DIM3 Word8
+flipHorizontally rp = (R.computeS $ backpermute e order rp)
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. oldRow :. col - oldCol - 1 :. oldChan
+
+-- |Stack the images vertically, placing the first image on top of the second.
+vStack :: Array R.D DIM3 Word8 -> Array R.D DIM3 Word8 -> Array R.D DIM3 Word8
+vStack a b = R.traverse2 a b combExtent stack
+  where
+  combExtent (Z :. h1 :. w1 :. d1) (Z :. h2 :. w2 :. d2)
+    = Z :. (h1 + h2)  :. min w1 w2 :. min d1 d2
+  (Z :. ha :. _ :. _) = R.extent a
+  (Z :. hb :. _ :. _) = R.extent b
+  stack fa fb (Z :. h :. w :. d)
+	| h < hb    = fb (Z :. h :. w :. d)
+        | otherwise = fa (Z :. h - hb :. w :. d)
+
+vConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
+vConcat [] = error "vConcat: Can not concat an empty list into a Repa array"
+vConcat xs = R.computeS $ Prelude.foldl1 vStack (Prelude.map R.delay xs)
+
+hConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
+hConcat [] = error "hConcat: Can not concat an empty list into a Repa array"
+hConcat xs = R.computeS $ Prelude.foldl1 hStack (Prelude.map R.delay xs)
+
+-- |Stack the images horozontally, placing the first image on the left of the second.
+hStack :: Array R.D DIM3 Word8 -> Array R.D DIM3 Word8 -> Array R.D DIM3 Word8
+hStack a b = R.traverse2 a b combExtent stack
+  where
+  combExtent (Z :. r1 :. c1 :. d1) ( Z :. r2 :. c2 :. d2)
+    = Z :. min r1 r2 :. c1 + c2 :. min d1 d2
+  (Z :. _ :. ca :. _) = R.extent a
+  stack fa fb (Z :. r :. c :. d)
+	| c < ca    = fa (Z :. r :. c :. d)
+	| otherwise = fb (Z :. r :. c - ca :. d)
