@@ -4,7 +4,7 @@ import Data.Word
 import Codec.Picture.Repa
 import Codec.Picture
 import System.Environment (getArgs)
-import Data.Array.Repa.ByteString as RB
+import Data.Array.Repa.Repr.ByteString as RB
 
 main = do
   ie <- getArgs >>= readImageRGBA . head
@@ -17,7 +17,7 @@ main = do
 
 -- |@repaToPicture cacheMeFlag array@ will convert a 'Repa' RGBA array to a tuple of
 -- the number of columns, rows and a bitmap for use with 'Gloss'.
-repaToPicture :: Bool -> Array DIM3 Word8 -> (Int, Int, Picture)
+repaToPicture :: Bool -> Array RB.B DIM3 Word8 -> (Int, Int, Picture)
 repaToPicture b arr = (col, row, bitmapOfByteString row col (RB.toByteString arr) b)
  where
   (Z :. col :. row :. z) = extent arr

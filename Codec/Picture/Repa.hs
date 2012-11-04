@@ -11,7 +11,7 @@ module Codec.Picture.Repa
        -- * Image Representations (Phantom Types)
        , RGBA, RGB, R, G, B
        -- * Helper Functions (useful for OpenGL etc.) 
-       , toForeignPtr
+       , toForeignPtr, toByteString
        , onImg
        , reverseColorChannel
        , flipHorizontally, flipVertically
@@ -31,6 +31,7 @@ import Foreign.ForeignPtr
 import Data.Word
 import Control.Monad
 import Data.ByteString as B
+import qualified Data.ByteString.Internal as BI
 import qualified Data.Vector.Unboxed as VU
 
 -- |An all-red image
@@ -58,6 +59,14 @@ data RGB
 -- All images are held in a three dimensional 'repa' array.  If the image
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
 data Img a = Img { imgData :: Array F DIM3 Word8 }
+
+-- |@toByteString arr@ converts images to bytestrings, which is often useful
+-- for Gloss.
+toByteString :: Img a -> B.ByteString
+toByteString (Img arr) =
+  let fp = RF.toForeignPtr arr
+      (Z :. row :. col :. chan) = extent arr
+  in BI.fromForeignPtr fp 0 (col * row * chan)
 
 onImg :: (Array F DIM3 Word8 -> Array F DIM3 Word8) -> Img a -> Img a
 onImg f (Img a) = Img (f a)
