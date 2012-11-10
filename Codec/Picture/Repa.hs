@@ -11,7 +11,7 @@ module Codec.Picture.Repa
        -- * Image Representations (Phantom Types)
        , RGBA, RGB, R, G, B
        -- * Helper Functions (useful for OpenGL etc.) 
-       , toForeignPtr, toByteString
+       , toForeignPtr, toByteString, toUnboxed, Collapsable(..)
        , onImg
        , reverseColorChannel
        , flipHorizontally, flipVertically
@@ -74,8 +74,7 @@ onImg f (Img a) = Img (f a)
 -- |By default, the color channel for 'RGBA' indexes 0 -> R, 1 -> G, 2
 -- -> B, 3 -> A.  This is the AGBR byte ordering in OpenGL.  For
 -- rendering with OpenGL's RGBA PixelFormat be sure to call
--- reverseColorChannel before converting to a Vector (or directly to
--- bytestring via 'repa-bytestring').
+-- reverseColorChannel before converting to a Vector.
 reverseColorChannel :: Img a -> Img a
 reverseColorChannel (Img r) = Img (R.computeS $ R.backpermute e order r)
   where
@@ -144,6 +143,31 @@ toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
 toForeignPtr r = (RF.toForeignPtr . imgData $ r, row * col * d, 0)
  where
  (Z :. row :. col :. d) = extent (imgData r)
+
+-- | O(n)  Convert to an unboxed vector
+toUnboxed :: Img a -> VU.Vector Word8
+toUnboxed = R.toUnboxed . R.computeUnboxedS . R.delay . imgData
+
+class Collapsable a t where
+  -- | Converts the color channel into a tuple:
+  collapseColorChannel :: Img a -> R.Array R.D R.DIM2 t
+
+instance Collapsable RGBA (Word8,Word8,Word8,Word8) where
+    collapseColorChannel (Img a) =
+        R.traverse4 a a a a
+             (\_ _ _ (Z:.r:.c:._) -> Z:.r:.c)
+             (\l1 l2 l3 l4 idx -> (l1 (idx:.0)
+                               ,l2 (idx:.1)
+                               ,l3 (idx:.2)
+                               ,l4 (idx:.3)))
+
+instance Collapsable RGBA (Word8,Word8,Word8) where
+    collapseColorChannel (Img a) =
+        R.traverse3 a a a
+             (\_ _ (Z:.r:.c:._) -> Z:.r:.c)
+             (\l1 l2 l3 idx -> (l1 (idx:.0)
+                               ,l2 (idx:.1)
+                               ,l3 (idx:.2)))
 
 -- Helper functions --
 getChannel :: Int -> PixelRGBA8 -> Word8
