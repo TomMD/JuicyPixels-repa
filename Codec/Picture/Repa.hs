@@ -20,6 +20,7 @@ module Codec.Picture.Repa
        , ToRGBAChannels(..)
        ) where
 import qualified Data.Array.Repa as R
+import qualified Data.Array.Repa.Unsafe as RU
 import qualified Data.Array.Repa.Repr.ForeignPtr as RF
 import Data.Array.Repa.Repr.ForeignPtr (F)
 import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
@@ -154,20 +155,20 @@ class Collapsable a t where
 
 instance Collapsable RGBA (Word8,Word8,Word8,Word8) where
     collapseColorChannel (Img a) =
-        R.traverse4 a a a a
-             (\_ _ _ (Z:.r:.c:._) -> Z:.r:.c)
-             (\l1 l2 l3 l4 idx -> (l1 (idx:.0)
-                               ,l2 (idx:.1)
-                               ,l3 (idx:.2)
-                               ,l4 (idx:.3)))
+        R.traverse a
+             (\(Z:.r:.c:._) -> Z:.r:.c)
+             (\l idx -> (l (idx:.0)
+                        ,l (idx:.1)
+                        ,l (idx:.2)
+                        ,l (idx:.3)))
 
 instance Collapsable RGBA (Word8,Word8,Word8) where
     collapseColorChannel (Img a) =
-        R.traverse3 a a a
-             (\_ _ (Z:.r:.c:._) -> Z:.r:.c)
-             (\l1 l2 l3 idx -> (l1 (idx:.0)
-                               ,l2 (idx:.1)
-                               ,l3 (idx:.2)))
+        R.traverse a
+             (\(Z:.r:.c:._) -> Z:.r:.c)
+             (\l idx -> (l (idx:.0)
+                        ,l (idx:.1)
+                        ,l (idx:.2)))
 
 -- Helper functions --
 getChannel :: Int -> PixelRGBA8 -> Word8
@@ -328,3 +329,19 @@ hStack a b = R.traverse2 a b combExtent stack
   stack fa fb (Z :. r :. c :. d)
         | c < ca    = fa (Z :. r :. c :. d)
         | otherwise = fb (Z :. r :. c - ca :. d)
+
+type Histogram = R.Array R.D R.DIM1 Word8
+
+histograms :: Img a -> (Histogram, Histogram, Histogram, Histogram)
+histograms (Img arr) =
+    let (Z:.nrRow:.nrCol:._) = R.extent arr
+        zero = R.fromFunction (Z:.256) (\_ -> 0 :: Word8)
+        incElem idx x = RU.unsafeTraverse x id (\l i -> l i + if i==(Z:.fromIntegral idx) then 1 else 0)
+    in Prelude.foldl (\(hR, hG, hB, hA) (row,col) ->
+             let r = R.unsafeIndex arr (Z:.row:.col:.0)
+                 g = R.unsafeIndex arr (Z:.row:.col:.1)
+                 b = R.unsafeIndex arr (Z:.row:.col:.2)
+                 a = R.unsafeIndex arr (Z:.row:.col:.3)
+             in (incElem r hR, incElem g hG, incElem b hB, incElem a hA))
+          (zero,zero,zero,zero)
+          [ (row,col) | row <- [0..nrRow-1], col <- [0..nrCol-1] ]
