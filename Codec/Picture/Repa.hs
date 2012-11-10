@@ -307,7 +307,7 @@ vStack a b = R.traverse2 a b combExtent stack
   (Z :. ha :. _ :. _) = R.extent a
   (Z :. hb :. _ :. _) = R.extent b
   stack fa fb (Z :. h :. w :. d)
-	| h < hb    = fb (Z :. h :. w :. d)
+        | h < hb    = fb (Z :. h :. w :. d)
         | otherwise = fa (Z :. h - hb :. w :. d)
 
 vConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
@@ -326,5 +326,5 @@ hStack a b = R.traverse2 a b combExtent stack
     = Z :. min r1 r2 :. c1 + c2 :. min d1 d2
   (Z :. _ :. ca :. _) = R.extent a
   stack fa fb (Z :. r :. c :. d)
-	| c < ca    = fa (Z :. r :. c :. d)
-	| otherwise = fb (Z :. r :. c - ca :. d)
+        | c < ca    = fa (Z :. r :. c :. d)
+        | otherwise = fb (Z :. r :. c - ca :. d)
