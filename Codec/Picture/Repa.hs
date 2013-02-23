@@ -200,7 +200,7 @@ instance ToRGBAChannels PixelRGB8 where
 
 instance ToRGBAChannels PixelYA8 where
   toRGBAChannels = promotePixel
-  
+
 instance ToRGBAChannels Pixel8 where
   toRGBAChannels = promotePixel
 
@@ -228,28 +228,28 @@ instance ConvertImage DynamicImage RGBA where
   convertImage (ImageRGB8 i) = convertImage i
   convertImage (ImageRGBA8 i) = convertImage i -- zeroCopyConvert 4 i
   convertImage (ImageYCbCr8 i) = convertImage i
-  
+
 instance ConvertImage DynamicImage RGB where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i -- zeroCopyConvert 3 i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
-  
+
 instance ConvertImage DynamicImage R where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
-  
+
 instance ConvertImage DynamicImage G where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
   convertImage (ImageRGBA8 i) = convertImage i
   convertImage (ImageYCbCr8 i) = convertImage i
-  
+
 instance ConvertImage DynamicImage B where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
@@ -262,7 +262,7 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
     let z = 4
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z) 
                                     (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
-  
+
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
@@ -274,25 +274,27 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
     let z = 1
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 0 p)
-       
+
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 1 p)
-       
+
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
 
+-- |Flip an image vertically
 flipVertically :: Array F DIM3 Word8 -> Array F DIM3 Word8
 flipVertically rp = (R.computeS $ backpermute e order rp)
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. row - oldRow - 1 :. oldCol :. oldChan
 
+-- |Flip an image horizontally
 flipHorizontally :: Array F DIM3 Word8 -> Array F DIM3 Word8
 flipHorizontally rp = (R.computeS $ backpermute e order rp)
  where
@@ -311,10 +313,14 @@ vStack a b = R.traverse2 a b combExtent stack
         | h < hb    = fb (Z :. h :. w :. d)
         | otherwise = fa (Z :. h - hb :. w :. d)
 
+-- |Combines a list of images such that the first image is on top, then
+-- the second, and so on.
 vConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
 vConcat [] = error "vConcat: Can not concat an empty list into a Repa array"
 vConcat xs = R.computeS $ Prelude.foldl1 vStack (Prelude.map R.delay xs)
 
+-- |Combines a list of images such that the first image is on the left, then
+-- the second, and so on.
 hConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
 hConcat [] = error "hConcat: Can not concat an empty list into a Repa array"
 hConcat xs = R.computeS $ Prelude.foldl1 hStack (Prelude.map R.delay xs)
@@ -330,8 +336,12 @@ hStack a b = R.traverse2 a b combExtent stack
         | c < ca    = fa (Z :. r :. c :. d)
         | otherwise = fb (Z :. r :. c - ca :. d)
 
+-- | A histogram is a one dimensional array where each element
+-- indicates how many pixels held the value represented by the element's
+-- index.
 type Histogram = R.Array R.D R.DIM1 Word8
 
+-- | Compute the RGBA historgrams of the image.
 histograms :: Img a -> (Histogram, Histogram, Histogram, Histogram)
 histograms (Img arr) =
     let (Z:.nrRow:.nrCol:._) = R.extent arr
