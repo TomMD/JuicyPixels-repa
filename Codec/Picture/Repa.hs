@@ -315,15 +315,15 @@ vStack a b = R.traverse2 a b combExtent stack
 
 -- |Combines a list of images such that the first image is on top, then
 -- the second, and so on.
-vConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
+vConcat :: [Img a] -> Img a
 vConcat [] = error "vConcat: Can not concat an empty list into a Repa array"
-vConcat xs = R.computeS $ Prelude.foldl1 vStack (Prelude.map R.delay xs)
+vConcat xs = Img $ R.computeS $ Prelude.foldl1 vStack (Prelude.map (R.delay . imgData) xs)
 
 -- |Combines a list of images such that the first image is on the left, then
 -- the second, and so on.
-hConcat :: [Array F DIM3 Word8] -> Array F DIM3 Word8
+hConcat :: [Img a] -> Img a
 hConcat [] = error "hConcat: Can not concat an empty list into a Repa array"
-hConcat xs = R.computeS $ Prelude.foldl1 hStack (Prelude.map R.delay xs)
+hConcat xs = Img $ R.computeS $ Prelude.foldl1 hStack (Prelude.map (R.delay . imgData) xs)
 
 -- |Stack the images horozontally, placing the first image on the left of the second.
 hStack :: Array R.D DIM3 Word8 -> Array R.D DIM3 Word8 -> Array R.D DIM3 Word8
@@ -355,3 +355,9 @@ histograms (Img arr) =
              in (incElem r hR, incElem g hG, incElem b hB, incElem a hA))
           (zero,zero,zero,zero)
           [ (row,col) | row <- [0..nrRow-1], col <- [0..nrCol-1] ]
+
+-- | Threshold takes an image and a color channel and a level, returning an
+-- image with each pixel of that color channel zeroed or saturated
+-- depending on if it was @<=@ the bound or not (@>@).
+-- threshhold :: Img a -> Int -> Word8 -> Img a
+-- threshhold (Img arr) chan level = do
