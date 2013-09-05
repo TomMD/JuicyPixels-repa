@@ -19,7 +19,7 @@ Cabal-version:       >=1.6
 Library
   Exposed-modules:     Codec.Picture.Repa
   Build-depends:       base >= 4.0 && < 5, repa >= 3.2
-                    , JuicyPixels >= 1.1
+                    , JuicyPixels >= 3.1
                     , vector >= 0.9
                     , bytestring >= 0.9
   -- Other-modules:       
