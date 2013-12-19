@@ -2,7 +2,7 @@
 module Codec.Picture.Repa
        ( -- * Primitive types and operations
          Img, imgData
-       , convertImage
+       , convertImage, imgToImage
        -- * Generic interface
        , readImage, decodeImage
        -- * Monomorphic image decoding functions
@@ -16,6 +16,8 @@ module Codec.Picture.Repa
        , reverseColorChannel
        , flipHorizontally, flipVertically
        , vConcat, hConcat
+       -- * Saving Images
+       , module Codec.Picture.Saving
        -- * Internal Functionallity (exported for advanced uses)
        , ToRGBAChannels(..)
        ) where
@@ -27,6 +29,7 @@ import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
 import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
 import Codec.Picture.Types hiding (convertImage)
+import Codec.Picture.Saving
 import qualified Data.Vector.Storable as S
 import Foreign.ForeignPtr
 import Data.Word
@@ -286,6 +289,18 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
     let z = 1
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
+
+-- Convert a repa-based 'Img' to a JuicyPixels Vector-based 'DynaimcImage'.
+imgToImage :: Img a -> DynamicImage
+imgToImage (Img arr) =
+        let e@(Z :. row :. col :. z)  = extent arr
+            f co ro =
+               let r = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.0)
+                   g = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.1)
+                   b = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.2)
+                   a = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.3)
+               in PixelRGBA8 r g b a
+        in ImageRGBA8 (generateImage f col row)
 
 -- |Flip an image vertically
 flipVertically :: Array F DIM3 Word8 -> Array F DIM3 Word8

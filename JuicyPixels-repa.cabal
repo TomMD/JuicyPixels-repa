@@ -1,5 +1,5 @@
 Name:                JuicyPixels-repa
-Version:             0.6.1
+Version:             0.7
 Synopsis:            Convenience functions to obtain array representations of images.
 Description:         This wraps the Juicy.Pixels library to convert into 'Repa' and 
                      'Data.Vector.Storable' formats.
