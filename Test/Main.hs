@@ -4,20 +4,15 @@ import Data.Word
 import Codec.Picture.Repa
 import Codec.Picture
 import System.Environment (getArgs)
-import Data.Array.Repa.Repr.ByteString as RB
+-- import Data.Array.Repa.Repr.ByteString as RB
 
 main = do
   ie <- getArgs >>= readImageRGBA . head
   let i = either error id ie
-      mkPic = (\(x,y,pic) -> pic) . repaToPicture True . imgData
-  -- display (FullScreen (1280,1024)) white (mkPic i)
-  display (FullScreen (1280,1024)) white (mkPic $ flipVertically i)
-  display (FullScreen (1280,1024)) white (mkPic $ flipHorizontally i)
-  display (FullScreen (1280,1024)) white (mkPic $ flipVertically $ flipHorizontally i)
+      mkPic img = let (Z:.c:.r:.z) = extent (imgData img)
+                  in bitmapOfByteString r c (toByteString img) True
+  -- display (FullScreen (800,600)) white (mkPic i)
+  display (FullScreen (800,600)) white (mkPic $ flipVertically `onImg` i)
+  -- display (FullScreen (800,600)) white (mkPic $ flipHorizontally`onImg`  i)
+  -- display (FullScreen (800,600)) white (mkPic $ (flipVertically . flipHorizontally) `onImg` i)
 
--- |@repaToPicture cacheMeFlag array@ will convert a 'Repa' RGBA array to a tuple of
--- the number of columns, rows and a bitmap for use with 'Gloss'.
-repaToPicture :: Bool -> Array RB.B DIM3 Word8 -> (Int, Int, Picture)
-repaToPicture b arr = (col, row, bitmapOfByteString row col (RB.toByteString arr) b)
- where
-  (Z :. col :. row :. z) = extent arr

@@ -1,4 +1,4 @@
-{-# LANGUAGE EmptyDataDecls, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE EmptyDataDecls, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses, ViewPatterns #-}
 module Codec.Picture.Repa
        ( -- * Primitive types and operations
          Img, imgData
@@ -67,7 +67,7 @@ data Img a = Img { imgData :: Array F DIM3 Word8 }
 -- |@toByteString arr@ converts images to bytestrings, which is often useful
 -- for Gloss.
 toByteString :: Img a -> B.ByteString
-toByteString (Img arr) =
+toByteString ((onImg flipVertically . reverseColorChannel) -> Img arr) =
   let fp = RF.toForeignPtr arr
       (Z :. row :. col :. chan) = extent arr
   in BI.fromForeignPtr fp 0 (col * row * chan)
@@ -263,14 +263,14 @@ instance ConvertImage DynamicImage B where
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z) 
-                                    (\(Z :. y :. x :. z') -> getPixel x y (z - z' - 1) p)
+    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+                                    (\(Z :. y :. x :. z') -> getPixel x y z' p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
     in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
-                            (\(Z :. y :. x :. z') -> getPixel x y (z' - z -1) p)
+                            (\(Z :. y :. x :. z') -> getPixel x y z' p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
@@ -295,10 +295,11 @@ imgToImage :: Img a -> DynamicImage
 imgToImage (Img arr) =
         let e@(Z :. row :. col :. z)  = extent arr
             f co ro =
-               let r = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.0)
-                   g = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.1)
-                   b = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.2)
-                   a = fromIntegral $ R.unsafeIndex arr (Z:.ro:.co:.3)
+               let r = R.unsafeIndex arr (Z:.ro:.co:.(max 0 0))
+                   g = R.unsafeIndex arr (Z:.ro:.co:.(max 0 1))
+                   b = R.unsafeIndex arr (Z:.ro:.co:.(max 0 2))
+                   a = if z == 4 then R.unsafeIndex arr (Z:.ro:.co:.3)
+                                 else 255
                in PixelRGBA8 r g b a
         in ImageRGBA8 (generateImage f col row)
 
