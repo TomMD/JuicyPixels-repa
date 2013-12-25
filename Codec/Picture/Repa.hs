@@ -24,8 +24,9 @@ module Codec.Picture.Repa
 import qualified Data.Array.Repa as R
 import qualified Data.Array.Repa.Unsafe as RU
 import qualified Data.Array.Repa.Repr.ForeignPtr as RF
+import qualified Data.Array.Repa.Repr.Vector as RV
 import Data.Array.Repa.Repr.ForeignPtr (F)
-import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent)
+import Data.Array.Repa ((:.), Array, (:.)(..), Z(..), DIM3, backpermute, extent, D)
 import qualified Codec.Picture as P
 import Codec.Picture hiding (readImage, decodeImage)
 import Codec.Picture.Types hiding (convertImage)
@@ -62,17 +63,17 @@ data RGB
 --
 -- All images are held in a three dimensional 'repa' array.  If the image
 -- format is only two dimensional (ex: R, G, or B) then the shape is @Z :. y :. x :. 1@.
-data Img a = Img { imgData :: Array F DIM3 Word8 }
+data Img a = Img { imgData :: Array D DIM3 Word8 }
 
 -- |@toByteString arr@ converts images to bytestrings, which is often useful
 -- for Gloss.
 toByteString :: Img a -> B.ByteString
 toByteString ((onImg flipVertically . reverseColorChannel) -> Img arr) =
-  let fp = RF.toForeignPtr arr
+  let fp = RF.toForeignPtr $ R.computeS arr
       (Z :. row :. col :. chan) = extent arr
   in BI.fromForeignPtr fp 0 (col * row * chan)
 
-onImg :: (Array F DIM3 Word8 -> Array F DIM3 Word8) -> Img a -> Img a
+onImg :: (Array D DIM3 Word8 -> Array D DIM3 Word8) -> Img a -> Img a
 onImg f (Img a) = Img (f a)
 
 -- |By default, the color channel for 'RGBA' indexes 0 -> R, 1 -> G, 2
@@ -80,7 +81,7 @@ onImg f (Img a) = Img (f a)
 -- rendering with OpenGL's RGBA PixelFormat be sure to call
 -- reverseColorChannel before converting to a Vector.
 reverseColorChannel :: Img a -> Img a
-reverseColorChannel (Img r) = Img (R.computeS $ R.backpermute e order r)
+reverseColorChannel (Img r) = Img (R.backpermute e order r)
   where
   e@(Z :. row :. col :. z)  = R.extent r
   order (Z :. r :. c :. z') = Z :. r :. c :. z - z' - 1
@@ -144,7 +145,7 @@ readImage f = liftM decodeImage (B.readFile f)
 
 -- | O(n)  returning (pointer, length, offset)
 toForeignPtr :: Img RGBA -> (ForeignPtr Word8, Int, Int)
-toForeignPtr r = (RF.toForeignPtr . imgData $ r, row * col * d, 0)
+toForeignPtr r = (RF.toForeignPtr . R.computeS . imgData $ r, row * col * d, 0)
  where
  (Z :. row :. col :. d) = extent (imgData r)
 
@@ -207,15 +208,13 @@ instance ToRGBAChannels PixelYA8 where
 instance ToRGBAChannels Pixel8 where
   toRGBAChannels = promotePixel
 
-{-
-zeroCopyConvert :: Int -> Image a -> Img b
+zeroCopyConvert :: Int -> Image PixelRGBA8 -> Img b
 zeroCopyConvert cc (Image w h dat) =
     let (ptr,off,len) = S.unsafeToForeignPtr dat
         sh = Z :. h :. w :. cc
     in if off == 0
-       then flipVertically . Img . R.unsafeFromForeignPtr sh   $  ptr
-       else flipVertically . Img . R.fromVector sh $ VU.convert $ dat
--}
+       then Img . flipVertically . R.delay . RF.fromForeignPtr sh $  ptr
+       else Img . flipVertically . R.delay . RV.fromVector sh $ VU.convert $ dat
 
 -- Now we start the instances needing exported
 
@@ -229,7 +228,7 @@ instance ConvertImage DynamicImage RGBA where
   convertImage (ImageY8 i) = convertImage i
   convertImage (ImageYA8 i) = convertImage i
   convertImage (ImageRGB8 i) = convertImage i
-  convertImage (ImageRGBA8 i) = convertImage i -- zeroCopyConvert 4 i
+  convertImage (ImageRGBA8 i) = zeroCopyConvert 4 i
   convertImage (ImageYCbCr8 i) = convertImage i
 
 instance ConvertImage DynamicImage RGB where
@@ -263,36 +262,39 @@ instance ConvertImage DynamicImage B where
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGBA where
   convertImage p@(Image w h dat) =
     let z = 4
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
                                     (\(Z :. y :. x :. z') -> getPixel x y z' p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) RGB where
   convertImage p@(Image w h dat) =
     let z = 3
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z') -> getPixel x y z' p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) R where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 0 p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) G where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 1 p)
 
 instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
   convertImage p@(Image w h dat) =
     let z = 1
-    in Img $ R.computeS $ R.fromFunction (Z :. h :. w :. z)
+    in Img $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
 
 -- Convert a repa-based 'Img' to a JuicyPixels Vector-based 'DynaimcImage'.
 imgToImage :: Img a -> DynamicImage
-imgToImage (Img arr) =
+imgToImage (Img arr0) = ImageRGBA8 $ Image w h (S.unsafeFromForeignPtr0 (RF.toForeignPtr arr) (h*w*z) )
+  where (Z :. h :. w :. z) = extent arr
+        arr = R.computeS arr0
+{-
         let e@(Z :. row :. col :. z)  = extent arr
             f co ro =
                let r = R.unsafeIndex arr (Z:.ro:.co:.(max 0 0))
@@ -302,17 +304,18 @@ imgToImage (Img arr) =
                                  else 255
                in PixelRGBA8 r g b a
         in ImageRGBA8 (generateImage f col row)
+-}
 
 -- |Flip an image vertically
-flipVertically :: Array F DIM3 Word8 -> Array F DIM3 Word8
-flipVertically rp = (R.computeS $ backpermute e order rp)
+flipVertically :: Array D DIM3 Word8 -> Array D DIM3 Word8
+flipVertically rp = backpermute e order rp
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. row - oldRow - 1 :. oldCol :. oldChan
 
 -- |Flip an image horizontally
-flipHorizontally :: Array F DIM3 Word8 -> Array F DIM3 Word8
-flipHorizontally rp = (R.computeS $ backpermute e order rp)
+flipHorizontally :: Array D DIM3 Word8 -> Array D DIM3 Word8
+flipHorizontally rp = backpermute e order rp
  where
  e@(Z :. row :. col :. z) = extent rp
  order (Z :. oldRow :. oldCol :. oldChan) = Z :. oldRow :. col - oldCol - 1 :. oldChan
@@ -333,13 +336,13 @@ vStack a b = R.traverse2 a b combExtent stack
 -- the second, and so on.
 vConcat :: [Img a] -> Img a
 vConcat [] = error "vConcat: Can not concat an empty list into a Repa array"
-vConcat xs = Img $ R.computeS $ Prelude.foldl1 vStack (Prelude.map (R.delay . imgData) xs)
+vConcat xs = Img $ Prelude.foldl1 vStack (Prelude.map (R.delay . imgData) xs)
 
 -- |Combines a list of images such that the first image is on the left, then
 -- the second, and so on.
 hConcat :: [Img a] -> Img a
 hConcat [] = error "hConcat: Can not concat an empty list into a Repa array"
-hConcat xs = Img $ R.computeS $ Prelude.foldl1 hStack (Prelude.map (R.delay . imgData) xs)
+hConcat xs = Img $ Prelude.foldl1 hStack (Prelude.map (R.delay . imgData) xs)
 
 -- |Stack the images horozontally, placing the first image on the left of the second.
 hStack :: Array R.D DIM3 Word8 -> Array R.D DIM3 Word8 -> Array R.D DIM3 Word8

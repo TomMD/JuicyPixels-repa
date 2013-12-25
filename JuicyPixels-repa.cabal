@@ -22,6 +22,7 @@ Library
                     , JuicyPixels >= 3.1
                     , vector >= 0.9
                     , bytestring >= 0.9
+  ghc-options:      -O2
   -- Other-modules:       
   -- Build-tools:         
   
