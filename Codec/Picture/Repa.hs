@@ -365,7 +365,8 @@ histograms :: Img a -> (Histogram, Histogram, Histogram, Histogram)
 histograms (Img arr) =
     let (Z:.nrRow:.nrCol:._) = R.extent arr
         zero = R.fromFunction (Z:.256) (\_ -> 0 :: Word8)
-        incElem idx x = RU.unsafeTraverse x id (\l i -> l i + if i==(Z:.fromIntegral idx) then 1 else 0)
+        incElem :: Word8 -> Array R.D R.DIM1 Word8 -> Array R.D R.DIM1 Word8
+        incElem idx x = RU.unsafeTraverse x id (\l i -> l i + if i == (Z:.fromIntegral idx) then 1 else 0)
     in Prelude.foldl (\(hR, hG, hB, hA) (row,col) ->
              let r = R.unsafeIndex arr (Z:.row:.col:.0)
                  g = R.unsafeIndex arr (Z:.row:.col:.1)
