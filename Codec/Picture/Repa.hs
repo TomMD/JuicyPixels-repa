@@ -289,7 +289,7 @@ instance (ToRGBAChannels a, Pixel a) => ConvertImage (Image a) B where
     in Img $ R.fromFunction (Z :. h :. w :. z)
                             (\(Z :. y :. x :. z) -> getPixel x y 2 p)
 
--- Convert a repa-based 'Img' to a JuicyPixels Vector-based 'DynaimcImage'.
+-- Convert a repa-based 'Img' to a JuicyPixels Vector-based 'DynamicImage'.
 imgToImage :: Img a -> DynamicImage
 imgToImage (Img arr0) = ImageRGBA8 $ Image w h (S.unsafeFromForeignPtr0 (RF.toForeignPtr arr) (h*w*z) )
   where (Z :. h :. w :. z) = extent arr
