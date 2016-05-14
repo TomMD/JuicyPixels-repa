@@ -1,7 +1,7 @@
 {-# LANGUAGE EmptyDataDecls, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses, ViewPatterns #-}
 module Codec.Picture.Repa
        ( -- * Primitive types and operations
-         Img, imgData
+         Img(..), imgData
        , convertImage, imgToImage
        -- * Generic interface
        , readImage, decodeImage
